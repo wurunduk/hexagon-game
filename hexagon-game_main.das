@@ -16,16 +16,17 @@ let scale = 30.0
 
 let colors_bg1 = 0x303030
 let colors_bg2 = 0xD4CDBD
-let colors_bg3 = 0x000000
+let colors_bg3 = 0x3D3D3D
 let colors_center = 0x303030
 let colors_edge = 0xD4CDBD
 let colors_player = 0x000000
-let colors_block = 0x000000
+let colors_block = 0xC5A03A
 
 var game_shapeCenter = float2(0.0)
 // position relative to game_shapeCenter
-var game_shapeLightOffset = float2(15.0)
+var game_shapeLightOffset = float2(10.0)
 var game_cameraAngle = float2(0.0, 0.0)
+var game_paused = false
 
 let player_size = .2
 let player_edge_offset = 0.3
@@ -56,7 +57,14 @@ def cross(a,b: float2)
 
 // is b between a and c
 def is_in_range(a,b,c: float2)
-    return cross(a,b)*cross(a,c) >= 0.0 && cross(c,b)*cross(c,a) >= 0.0
+    let AB = b - a
+    let AC = c - a
+    let BC = c - b
+    if dot(AB, AC) < 0.0 || dot(AB, BC) < 0.0
+        return false
+    
+    let norm = cross(normalize(AB), normalize(AC))
+    return abs(norm) < 0.0
 
 def fill_sector(center: float2; vec_from, vec_to: float2; color: uint)
     // cant bother to calculate position on exactly screens edge. This should do in all cases
@@ -65,20 +73,59 @@ def fill_sector(center: float2; vec_from, vec_to: float2; color: uint)
     let big_distance = hsw*hsw + hsh*hsh
 
     var polygons: array<float2>
-    polygons |> push(center)
-    polygons |> push(center + vec_from*big_distance)
+    polygons |> push <| center
+    polygons |> push <| (center + vec_from*big_distance)
 
     if is_in_range(vec_from, -center + float2(hsw*2.0, 0.0), vec_to)
-        polygons |> push(float2(float(get_screen_width()), 0.0))
+        polygons |> push <| float2(float(get_screen_width()), 0.0)
+    if length(polygons) == 3
+        fill_convex_polygon(polygons, color)
+        let tempVec = polygons[2]
+        polygons |> clear
+        polygons |> push <| center
+        polygons |> push <| tempVec
     if is_in_range(vec_from, -center + float2(hsw*2.0, hsh*2.0), vec_to)
-        polygons |> push(float2(float(get_screen_width()), float(get_screen_height())))
+        polygons |> push <| float2(float(get_screen_width()), float(get_screen_height()))
+    if length(polygons) == 3
+        fill_convex_polygon(polygons, color)
+        let tempVec = polygons[2]
+        polygons |> clear
+        polygons |> push <| center
+        polygons |> push <| tempVec
     if is_in_range(vec_from, -center + float2(0.0, hsh*2.0), vec_to)
-        polygons |> push(float2(0.0, float(get_screen_height())))
+        polygons |> push <| float2(0.0, float(get_screen_height()))
+    if length(polygons) == 3
+        fill_convex_polygon(polygons, color)
+        let tempVec = polygons[2]
+        polygons |> clear
+        polygons |> push <| center
+        polygons |> push <| tempVec
     if is_in_range(vec_from, -center, vec_to)
-        polygons |> push(float2(0.0, 0.0))
+        polygons |> push <| float2(0.0, 0.0)
+    if length(polygons) == 3
+        fill_convex_polygon(polygons, color)
+        let tempVec = polygons[2]
+        polygons |> clear
+        polygons |> push <| center
+        polygons |> push <| tempVec
         
-    polygons |> push(center + vec_to*big_distance)
+    polygons |> push <| (center + vec_to*big_distance)
     fill_convex_polygon(polygons, color)
+
+    // TODO: fill sector function is trash
+    // circle(center.x, center.y, 3.0, 0xFFFFFF)
+
+    // let scale = 0.5
+    // rect(hsw - hsw*scale, hsh - hsh*scale, hsw*2.0*scale, hsh*2.0*scale, 0xFF0000)
+
+    // let scaledCenter = (center - float2(hsw, hsh))*scale + float2(hsw, hsh)
+    // line(scaledCenter.x, scaledCenter.y,
+    //     scaledCenter.x + vec_from.x*big_distance*scale, scaledCenter.y + vec_from.y*big_distance*scale, 0x0000FF)
+    // line(scaledCenter.x, scaledCenter.y,
+    //     scaledCenter.x + vec_to.x*big_distance*scale, scaledCenter.y + vec_to.y*big_distance*scale, 0x0000FF)
+    // for p in polygons
+    //     line(scaledCenter.x, scaledCenter.y,
+    //         hsw + (p.x - hsw)*scale, hsh + (p.y - hsh)*scale, 0xFF0000)
 
 def transform_vec(vec: float2; angle: float2)
     let c = cos(length(angle))
@@ -101,7 +148,7 @@ def get_center()
     return float2(float(get_screen_width())/2.0, float(get_screen_width())/2.0)
 
 def get_color_by_index(index: int)
-    return (index + 0*int(get_time_after_start()))%2 == 0 ? colors_bg1 : colors_bg2
+    return (index + 0*int(get_time_after_start()))%2 == 0 ? index%2 == 0 && index == length(vecs)-1 ? colors_bg3 : colors_bg1 : colors_bg2
 
 def draw_background()
     let center = get_center() + game_shapeCenter + transform_vec(game_shapeLightOffset, game_cameraAngle)
@@ -151,8 +198,7 @@ def draw_player()
 
 def draw_blocks()
     let center = get_center() + game_shapeCenter + transform_vec(game_shapeLightOffset, game_cameraAngle)
-    // let delta = (game_sectorLightCenter - game_shapeCenter)/scale
-    
+
     for b in blocks
         let v1 = vecs[b.sector] - game_shapeLightOffset/scale
         let v2 = vecs[(b.sector+1)%length(vecs)] - game_shapeLightOffset/scale
@@ -167,13 +213,15 @@ def draw_blocks()
 
 
 def move_game_field(dt: float)
+    if game_paused
+        return
     game_shapeCenter.x = 100.0*sin(get_time_after_start()*5.0/10.0)
     game_shapeCenter.y = 100.0*sin(get_time_after_start()*4.0/10.0)
 
     for v in vecs
         v = rotate_vec(v, -dt*(abs(sin(get_time_after_start()))*0.5 - 1.5))
     game_shapeLightOffset = rotate_vec(game_shapeLightOffset, -dt*(abs(sin(get_time_after_start()))*0.5 - 1.5))
-    game_shapeLightOffset = rotate_vec(game_shapeLightOffset, -dt)
+    game_shapeLightOffset = rotate_vec(game_shapeLightOffset, -dt/10.0)
 
     let screenRotAngle = (PI/3.0)//*abs(sin(get_time_after_start()/1.0))// + (PI/3.0 - PI/4.0)*abs(sin(get_time_after_start()*2.0))
     game_cameraAngle = screenRotAngle * normalize(float2(  cos(get_time_after_start()/10.0),
@@ -238,12 +286,15 @@ def initialize(is_hard_reload: bool)
     set_resolution(1000, 1000)
     set_antialiasing(4)
 
-    fill_plane_with_vecs(6)
+    fill_plane_with_vecs(8)
 
 [export]
 def act(dt: float)
     if get_key(VK_ESCAPE)
         schedule_quit_game()
+
+    if get_key_down(VK_P)
+        game_paused = !game_paused
 
     move_game_field(dt)
     move_player(dt)
@@ -260,4 +311,3 @@ def draw
     draw_player()
     draw_blocks()
     draw_shape()
-    text_out(20, 20, "{player_sector}", 0x000000)
