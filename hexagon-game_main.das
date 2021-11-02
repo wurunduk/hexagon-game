@@ -135,7 +135,7 @@ def draw_player()
     let v1 = vecs[player_sector] - delta
     let v2 = vecs[(player_sector+1)%length(vecs)] - delta
 
-    let normal = normalize(rotate_vec(v1-v2, PI/2.0))
+    let normal = normalize(rotate_vec(v2-v1, PI/2.0))
 
     var player_center = lerp(v1, v2, player_position)
     player_center += normal*player_edge_offset + normal*player_size/2.0
