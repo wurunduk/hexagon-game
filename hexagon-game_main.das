@@ -41,7 +41,8 @@ var player_health = 2
 
 let block_speed = 14.0
 
-let block_generator_interval = 1.0
+let block_generator_interval = .7
+let block_generator_spawnCount = 3
 var block_generator_nextBlockAtTime = 0.0
 
 def vec_from_ang(ang: float)
@@ -262,10 +263,11 @@ def move_player(dt: float)
         player_sector = (player_sector+1)%length(vecs)
 
 def move_blocks(dt: float)
-    for i in range(length(blocks)-1)
-        blocks[i].position -= dt*block_speed
-        if blocks[i].position + blocks[i].height < 0.0
-            blocks |> erase <| i
+    let l = length(blocks)-1
+    for i in range(l)
+        blocks[l - i].position -= dt*block_speed
+        if blocks[l - i].position + blocks[l - i].height < 0.0
+            blocks |> erase <| (l - i)
 
 def create_new_blocks()
     if block_generator_nextBlockAtTime > get_time_after_start()
@@ -274,9 +276,10 @@ def create_new_blocks()
     block_generator_nextBlockAtTime = get_time_after_start() + block_generator_interval
     var seed: int4
     randomize_seed(seed)
-    let height = 2.0
-    let sector = random_int(seed)%length(vecs)
-    blocks |> push <| [[Block position = 30.0, height = height, sector = sector]]
+    for i in range(block_generator_spawnCount)
+        let height = 2.0
+        let sector = random_int(seed)%length(vecs)
+        blocks |> push <| [[Block position = 60.0, height = height, sector = sector]]
 
 
 
@@ -296,11 +299,11 @@ def act(dt: float)
     if get_key_down(VK_P)
         game_paused = !game_paused
 
+    create_new_blocks()
+
     move_game_field(dt)
     move_player(dt)
     move_blocks(dt)
-
-    create_new_blocks()
 
     // _debug_move_light_center()
     
