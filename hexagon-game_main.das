@@ -12,7 +12,7 @@ struct Block
     position: float
 var blocks: array<Block>
 
-var scale = 30.0
+var scale = 50.0
 
 let colors_bg1 = 0x303030
 let colors_bg2 = 0xD4CDBD
@@ -39,11 +39,12 @@ let player_maxSpeed = 8.0
 var player_position = 0.5
 var player_sector = 0
 var player_currentSpeed = 0.0
-var player_health = 2
+var player_health = 1
+var player_time = 0.0
 
-let block_speed = 2.0
+let block_speed = 12.0
 
-let block_generator_interval = 1.7
+let block_generator_interval = .7
 let block_generator_spawnCount = 3
 var block_generator_nextBlockAtTime = 0.0
 
@@ -146,6 +147,7 @@ def fill_plane_with_vecs(amount: int)
     var seed: int4
     randomize_seed(seed)
     for i in range(amount)
+        // TODO: non normalized sector vectors break collition for now
         vecs |> push <| (vec_from_ang(2.0*PI*float(i)/float(amount)))//*(1.0 + random_float(seed)*1.0))
 
 def get_color_by_index(index: int)
@@ -246,7 +248,12 @@ def _debug_move_light_center()
     if get_mouse_button(MB_LEFT)
         game_blockLightOffset = (get_mouse_position() - game_hexagonCenter)
 
+def get_player_vertical_position()
+    return 1.0 + player_edge_offset + player_size
+
 def move_player(dt: float)
+    if game_paused
+        return
     var moving = false
     if get_key(VK_A) || get_key(VK_LEFT)
         player_currentSpeed += player_acceleration
@@ -268,7 +275,7 @@ def move_player(dt: float)
 
     // var player_center = lerp(v1, v2, player_position)
     // player_center += normal*player_edge_offset + normal*player_size/2.0
-    let playerVerticalPos = 1.0 + player_edge_offset + player_size
+    let playerVerticalPos = get_player_vertical_position()
 
     let rightSectorId = (player_sector+1)%length(vecs)
     var leftSectorId = player_sector - 1
@@ -289,8 +296,6 @@ def move_player(dt: float)
             else
                 blockedLeft = true
 
-    print("{playerVerticalPos}  {blockedLeft}  {blockedRight}  {player_position} {player_sector}\n")
-
     if player_position < 0.0
         if !blockedLeft
             player_position = 1.0
@@ -306,13 +311,23 @@ def move_player(dt: float)
             player_position = 1.0
 
 def move_blocks(dt: float)
+    if game_paused
+        return
     let l = length(blocks)-1
     for i in range(l)
-        blocks[l - i].position -= dt*block_speed
-        if blocks[l - i].position + blocks[l - i].height < 0.0
+        var b& = blocks[l-i]
+        b.position -= dt*block_speed
+        if b.position + b.height < 0.0
             blocks |> erase <| (l - i)
+        
+        let playerVerticalPos = get_player_vertical_position()
+
+        if b.sector == player_sector && b.position < playerVerticalPos && b.position + b.height > playerVerticalPos
+            player_health -= 1
 
 def create_new_blocks()
+    if game_paused
+        return
     if block_generator_nextBlockAtTime > get_time_after_start()
         return
 
