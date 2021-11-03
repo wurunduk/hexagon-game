@@ -12,21 +12,23 @@ struct Block
     position: float
 var blocks: array<Block>
 
-let scale = 30.0
+var scale = 30.0
 
 let colors_bg1 = 0x303030
 let colors_bg2 = 0xD4CDBD
 let colors_bg3 = 0x3D3D3D
-let colors_center = 0x303030
+let colors_hexagon = 0x303030
 let colors_edge = 0xD4CDBD
-let colors_player = 0x000000
+let colors_player = 0x42B0F0
 let colors_block = 0xC5A03A
 
-var game_shapeCenter = float2(0.0)
-// position relative to game_shapeCenter
-var game_shapeLightOffset = float2(10.0)
-var game_cameraAngle = float2(0.0, 0.0)
-var game_paused = false
+var game_hexagonCenter = float2(0.0)
+// position relative to game_hexagonCenter
+var game_hexagonLightOffset = float2(0.5)
+var game_blockLightColor = 0x200000
+var game_blockLightOffset = float2(0.0)
+var game_cameraAngle = float2(0.0)
+var game_paused = true
 
 let player_size = .2
 let player_edge_offset = 0.3
@@ -39,11 +41,13 @@ var player_sector = 0
 var player_currentSpeed = 0.0
 var player_health = 2
 
-let block_speed = 14.0
+let block_speed = 2.0
 
-let block_generator_interval = .7
+let block_generator_interval = 1.7
 let block_generator_spawnCount = 3
 var block_generator_nextBlockAtTime = 0.0
+
+
 
 def vec_from_ang(ang: float)
     return float2(sin(ang), cos(ang))
@@ -68,7 +72,7 @@ def is_in_range(a,b,c: float2)
     return abs(norm) < 0.0
 
 def fill_sector(center: float2; vec_from, vec_to: float2; color: uint)
-    // cant bother to calculate position on exactly screens edge. This should do in all cases
+    // TODO: fill sector function is trash
     let hsw = float(get_screen_width())/2.0
     let hsh = float(get_screen_height())/2.0
     let big_distance = hsw*hsw + hsh*hsh
@@ -113,7 +117,6 @@ def fill_sector(center: float2; vec_from, vec_to: float2; color: uint)
     polygons |> push <| (center + vec_to*big_distance)
     fill_convex_polygon(polygons, color)
 
-    // TODO: fill sector function is trash
     // circle(center.x, center.y, 3.0, 0xFFFFFF)
 
     // let scale = 0.5
@@ -137,6 +140,7 @@ def transform_vec(vec: float2; angle: float2)
         (c + (1.0-c)*angle.y*angle.y)*vec.y
     )
 
+
 def fill_plane_with_vecs(amount: int)
     vecs |> clear
     var seed: int4
@@ -144,65 +148,63 @@ def fill_plane_with_vecs(amount: int)
     for i in range(amount)
         vecs |> push <| (vec_from_ang(2.0*PI*float(i)/float(amount)))//*(1.0 + random_float(seed)*1.0))
 
-
-def get_center()
-    return float2(float(get_screen_width())/2.0, float(get_screen_width())/2.0)
-
 def get_color_by_index(index: int)
     return (index + 0*int(get_time_after_start()))%2 == 0 ? index%2 == 0 && index == length(vecs)-1 ? colors_bg3 : colors_bg1 : colors_bg2
 
 def draw_background()
-    let center = get_center() + game_shapeCenter + transform_vec(game_shapeLightOffset, game_cameraAngle)
-    let delta = game_shapeLightOffset/scale
+    let center = game_hexagonCenter + transform_vec(game_hexagonLightOffset, game_cameraAngle)*scale
 
     fill_sector(center,
-        normalize(transform_vec(vecs[length(vecs)-1] - delta, game_cameraAngle)),
-        normalize(transform_vec(vecs[0] - delta, game_cameraAngle)),
+        normalize(transform_vec(vecs[length(vecs)-1] - game_hexagonLightOffset, game_cameraAngle)),
+        normalize(transform_vec(vecs[0] - game_hexagonLightOffset, game_cameraAngle)),
         get_color_by_index(0))
     for i in range(1, length(vecs))
         fill_sector(center,
-            normalize(transform_vec(vecs[i-1] - delta, game_cameraAngle)),
-            normalize(transform_vec(vecs[i] - delta, game_cameraAngle)),
+            normalize(transform_vec(vecs[i-1] - game_hexagonLightOffset, game_cameraAngle)),
+            normalize(transform_vec(vecs[i] - game_hexagonLightOffset, game_cameraAngle)),
             get_color_by_index(i))
-    set_pixel(center.x, center.y, 0x000000)
 
-def draw_shape()
-    let center = get_center() + game_shapeCenter
-
+def draw_hexagon()
     var polygons: array<float2>
     for v in vecs
-        polygons |> push(center + transform_vec(v, game_cameraAngle)*scale)
-    fill_convex_polygon(polygons, colors_center)
+        polygons |> push(game_hexagonCenter + transform_vec(v, game_cameraAngle)*scale)
+    fill_convex_polygon(polygons, colors_hexagon)
     for i in range(length(polygons))
         line(polygons[i].x, polygons[i].y, polygons[(i+1)%length(polygons)].x, polygons[(i+1)%length(polygons)].y, colors_edge)
 
-def draw_player()
-    let center = get_center() + game_shapeCenter + transform_vec(game_shapeLightOffset, game_cameraAngle)
-    let delta = game_shapeLightOffset/scale
+struct PlayerPositionData
+    center: float2
+    baseNormal: float2
 
-    let v1 = vecs[player_sector] - delta
-    let v2 = vecs[(player_sector+1)%length(vecs)] - delta
+def get_player_position_data()
+    let v1 = vecs[player_sector] - game_hexagonLightOffset
+    let v2 = vecs[(player_sector+1)%length(vecs)] - game_hexagonLightOffset
 
     let normal = normalize(rotate_vec(v2-v1, PI/2.0))
 
     var player_center = lerp(v1, v2, player_position)
-    player_center += normal*player_edge_offset + normal*player_size/2.0
+    player_center += normalize(player_center)*player_edge_offset + normalize(player_center)*player_size*0.5
 
+    return [[PlayerPositionData center = player_center, baseNormal = normal]]
+
+def draw_player()
+    let center = game_hexagonCenter + transform_vec(game_hexagonLightOffset, game_cameraAngle)*scale
+    let ppd = get_player_position_data()
 
     let polygons = [[float2
-        center + transform_vec(player_center + normal*player_size, game_cameraAngle)*scale;
-        center + transform_vec(player_center + rotate_vec(normal, 2.0*PI/3.0)*player_size, game_cameraAngle)*scale;
-        center + transform_vec(player_center + rotate_vec(normal, 4.0*PI/3.0)*player_size, game_cameraAngle)*scale
+        center + transform_vec(ppd.center + normalize(ppd.center)*player_size, game_cameraAngle)*scale;
+        center + transform_vec(ppd.center + rotate_vec(ppd.baseNormal, 2.0*PI/3.0)*player_size, game_cameraAngle)*scale;
+        center + transform_vec(ppd.center + rotate_vec(ppd.baseNormal, 4.0*PI/3.0)*player_size, game_cameraAngle)*scale
         ]]
     fill_convex_polygon(polygons, colors_player)
-    return
 
 def draw_blocks()
-    let center = get_center() + game_shapeCenter + transform_vec(game_shapeLightOffset, game_cameraAngle)
+    let center = game_hexagonCenter + transform_vec(game_hexagonLightOffset, game_cameraAngle)*scale
+    let lightOffsetVec = transform_vec(game_blockLightOffset, game_cameraAngle)*scale
 
     for b in blocks
-        let v1 = vecs[b.sector] - game_shapeLightOffset/scale
-        let v2 = vecs[(b.sector+1)%length(vecs)] - game_shapeLightOffset/scale
+        let v1 = vecs[b.sector] - game_hexagonLightOffset
+        let v2 = vecs[(b.sector+1)%length(vecs)] - game_hexagonLightOffset
 
         let polygons = [[float2
             center + transform_vec(v1*max(1.0, b.position), game_cameraAngle)*scale;
@@ -210,19 +212,31 @@ def draw_blocks()
             center + transform_vec(v2*(b.position + b.height), game_cameraAngle)*scale;
             center + transform_vec(v2*max(1.0, b.position), game_cameraAngle)*scale
         ]]
-        fill_convex_polygon(polygons, colors_block)
+        
+        var blockCenter = float2(0.0)
+        for p in polygons
+            blockCenter += p
+        blockCenter *= 0.25
+
+        let blockAdditiveColor = multiply_colors(game_blockLightColor, make_color(min(dot(blockCenter - center, lightOffsetVec), 0.7)))
+        fill_convex_polygon(polygons, add_colors(colors_block, add_colors(game_blockLightColor, blockAdditiveColor)))
 
 
 def move_game_field(dt: float)
     if game_paused
         return
-    game_shapeCenter.x = 100.0*sin(get_time_after_start()*5.0/10.0)
-    game_shapeCenter.y = 100.0*sin(get_time_after_start()*4.0/10.0)
+    game_hexagonCenter.x = 100.0*sin(get_time_after_start()*5.0/10.0)
+    game_hexagonCenter.y = 100.0*sin(get_time_after_start()*4.0/10.0)
+
+    scale = 30.0 + 1.0*abs(sin(get_time_after_start()*6.0)*sin(get_time_after_start()*6.0))
+
+    let rot = -dt*(abs(sin(get_time_after_start()))*0.5 - 1.5)
 
     for v in vecs
-        v = rotate_vec(v, -dt*(abs(sin(get_time_after_start()))*0.5 - 1.5))
-    game_shapeLightOffset = rotate_vec(game_shapeLightOffset, -dt*(abs(sin(get_time_after_start()))*0.5 - 1.5))
-    game_shapeLightOffset = rotate_vec(game_shapeLightOffset, -dt/10.0)
+        v = rotate_vec(v, rot)
+    game_blockLightOffset = rotate_vec(game_blockLightOffset, rot*2.0)
+    game_hexagonLightOffset = rotate_vec(game_hexagonLightOffset, rot)
+    game_hexagonLightOffset = rotate_vec(game_hexagonLightOffset, -dt/10.0)
 
     let screenRotAngle = (PI/3.0)//*abs(sin(get_time_after_start()/1.0))// + (PI/3.0 - PI/4.0)*abs(sin(get_time_after_start()*2.0))
     game_cameraAngle = screenRotAngle * normalize(float2(  cos(get_time_after_start()/10.0),
@@ -230,7 +244,7 @@ def move_game_field(dt: float)
 
 def _debug_move_light_center()
     if get_mouse_button(MB_LEFT)
-        game_shapeLightOffset = (get_mouse_position() - get_center() - game_shapeCenter)
+        game_blockLightOffset = (get_mouse_position() - game_hexagonCenter)
 
 def move_player(dt: float)
     var moving = false
@@ -252,15 +266,44 @@ def move_player(dt: float)
     let distMupltiplyer = length(vecs[(player_sector+1)%length(vecs)] - vecs[player_sector])
     player_position += dt*player_currentSpeed/distMupltiplyer
 
+    // var player_center = lerp(v1, v2, player_position)
+    // player_center += normal*player_edge_offset + normal*player_size/2.0
+    let playerVerticalPos = 1.0 + player_edge_offset + player_size
+
+    let rightSectorId = (player_sector+1)%length(vecs)
+    var leftSectorId = player_sector - 1
+    if leftSectorId < 0
+        leftSectorId = length(vecs)-1
+
+    var blockedLeft = false
+    var blockedRight = false
+    for b in blocks
+        let isOnTheRight = b.sector == rightSectorId
+        let isOnTheLeft = b.sector == leftSectorId
+        if !isOnTheRight && !isOnTheLeft
+            continue
+        
+        if playerVerticalPos > b.position && playerVerticalPos < b.position + b.height
+            if isOnTheRight
+                blockedRight = true
+            else
+                blockedLeft = true
+
+    print("{playerVerticalPos}  {blockedLeft}  {blockedRight}  {player_position} {player_sector}\n")
+
     if player_position < 0.0
-        player_position = 1.0
-        player_sector -= 1
-        if player_sector < 0
-            player_sector = length(vecs)-1
+        if !blockedLeft
+            player_position = 1.0
+            player_sector = leftSectorId
+        else
+            player_position = 0.0
 
     if player_position > 1.0
-        player_position = 0.0
-        player_sector = (player_sector+1)%length(vecs)
+        if !blockedRight
+            player_position = 0.0
+            player_sector = rightSectorId
+        else
+            player_position = 1.0
 
 def move_blocks(dt: float)
     let l = length(blocks)-1
@@ -288,8 +331,9 @@ def initialize(is_hard_reload: bool)
     set_window_title("hexagon-game")
     set_resolution(1000, 1000)
     set_antialiasing(4)
+    setup_2d_camera(float2(0.0))
 
-    fill_plane_with_vecs(8)
+    fill_plane_with_vecs(6)
 
 [export]
 def act(dt: float)
@@ -311,6 +355,6 @@ def act(dt: float)
 [export]
 def draw
     draw_background()
-    draw_player()
     draw_blocks()
-    draw_shape()
+    draw_player()
+    draw_hexagon()
