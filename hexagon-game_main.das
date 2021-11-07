@@ -5,7 +5,8 @@ require daslib/media
 
 //TODO:
 // player and blocks should have shadows
-
+// music (duhh)
+// speed on longer sectors seem to be bigger
 
 // decs proved to be too hard to grasp on the fly xP
 var vecs: array<float2>
@@ -151,6 +152,7 @@ def fill_sector(center: float2; vec_from, vec_to: float2; color: uint)
     //     line(scaledCenter.x, scaledCenter.y,
     //         hsw + (p.x - hsw)*scale, hsh + (p.y - hsh)*scale, 0xFF0000)
 
+// project rotated plane onto (0,0,1) plane (used for simulating camera angled over)
 def transform_vec(vec: float2; angle: float2)
     let c = cos(length(angle))
     return float2(
@@ -181,7 +183,7 @@ def fill_plane_with_vecs(amount: int)
     var seed: int4
     randomize_seed(seed)
     for i in range(amount)
-        // TODO: non normalized sector vectors break collition for now
+        // TODO: non normalized sector vectors break collisions for now
         vecs |> push <| (vec_from_ang(2.0*PI*float(i)/float(amount)))//*(1.0 + random_float(seed)*1.0))
 
 def get_color_by_index(index: int)
@@ -294,6 +296,7 @@ def draw_ui()
 
 
 def move_game_field(dt: float)
+    // should be level dependant
     if game_paused
         return
     game_hexagonCenter.x = 100.0*sin(get_time_after_start()*5.0/10.0)
